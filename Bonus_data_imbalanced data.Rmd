@@ -1,0 +1,101 @@
+---
+title: "bonus_data_imbalanced_data"
+output: html_document
+date: "2024-04-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+# Load necessary libraries
+library(tidymodels)
+library(themis)  # Load themis for handling class imbalances
+library(readr)
+library(dplyr)
+library(yardstick)
+```
+
+```{r}
+# Read in the BONUS data
+df_bonus <- read_csv("paint_project_bonus_data.csv")
+df_bonus$outcome <- factor(df_bonus$challenge_outcome)
+
+# Define the preprocessing recipe with downsampling
+bonus_recipe <- recipe(challenge_outcome ~ ., data = df_bonus) %>%
+  step_other(all_nominal(), -all_outcomes(), threshold = 0.05) %>%
+  step_nzv(all_predictors()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  step_downsample(challenge_outcome, over_ratio = 1, skip = FALSE)
+```
+
+```{r}
+# Split the data into training and testing sets
+set.seed(2023)
+split <- initial_split(df_bonus, prop = 0.75)
+train_data <- training(split)
+test_data <- testing(split)
+
+# Define model specifications
+logistic_spec <- logistic_reg(mode = "classification", penalty = 0.01, mixture = 0.5) %>%
+  set_engine("glm")
+rf_spec <- rand_forest(mode = "classification", mtry = 3, trees = 500, min_n = 10) %>%
+  set_engine("ranger", importance = 'impurity')
+xgb_spec <- boost_tree(mode = "classification", trees = 1000) %>%
+  set_engine("xgboost", verbose = FALSE)
+```
+
+```{r}
+# Create workflows
+logistic_workflow <- workflow() %>%
+  add_recipe(bonus_recipe) %>%
+  add_model(logistic_spec)
+rf_workflow <- workflow() %>%
+  add_recipe(bonus_recipe) %>%
+  add_model(rf_spec)
+xgb_workflow <- workflow() %>%
+  add_recipe(bonus_recipe) %>%
+  add_model(xgb_spec)
+
+# Resampling control setup
+resampling_control <- control_resamples(save_pred = TRUE, verbose = TRUE)
+```
+
+```{r}
+# Fit models using resampling for logistic regression
+logistic_results <- fit_resamples(
+  logistic_workflow,
+  vfold_cv(train_data, v = 5),
+  control = resampling_control
+)
+
+# Fit models using resampling for random forest
+rf_results <- fit_resamples(
+  rf_workflow,
+  vfold_cv(train_data, v = 5),
+  control = resampling_control
+)
+
+# Fit models using resampling for XGBoost
+xgb_results <- fit_resamples(
+  xgb_workflow,
+  vfold_cv(train_data, v = 5),
+  control = resampling_control
+)
+
+# Print resampling results for logistic regression
+print(logistic_results)
+# Print resampling results for random forest
+print(rf_results)
+# Print resampling results for XGBoost
+print(xgb_results)
+
+```
+

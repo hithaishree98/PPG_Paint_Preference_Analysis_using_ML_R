@@ -1,0 +1,697 @@
+---
+title: "Part3_Classification"
+output: html_document
+date: "2024-04-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+## Load packages
+
+This example uses the `tidyverse` suite of packages.  
+
+```{r, load_tidyverse}
+library(tidyverse)
+library(corrplot)
+library(coefplot)
+library(splines)
+library(caret)
+library(xgboost)
+library(class)
+library(e1071) 
+library(pROC)
+```
+
+## Regression task
+
+```{r, read_final_data}
+df <- readr::read_csv("paint_project_train_data.csv", col_names = TRUE)
+df %>% glimpse()
+```
+
+## Binary classification task
+
+The Binary output variable, `outcome`, is a numeric variable.  
+
+```{r, show_outcome_class}
+df %>% pull(outcome) %>% class()
+```
+
+However, there are **only** two unique values for `outcome`.  
+
+```{r, show_outcome_values}
+df %>% count(outcome)
+```
+
+As stated previously, `outcome = 1` denotes the **EVENT** while `outcome = 0` denotes the **NON-EVENT**. Thus, the `outcome` variable uses the 0/1 encoding! This encoding is appropriate for `glm()` and the functions we create in homework assignments, and lecture examples. However, `caret` and `tidymodels` prefer a different encoding. For those reasons, two different binary classification data sets are defined. The first should be used for Parts iiiA) and iiiB) while the second should be used for iiiD).  
+
+The data set associated with iiiA) and iiiB) is created for you below. It removes the `response` variable so that way you can focus on the inputs and binary outcome.  
+
+```{r, make_iiiA_data}
+dfiiiA <- df %>% 
+  select(-response)
+
+dfiiiA %>% glimpse()
+```
+### Simple model
+###
+Use glm() to fit generalized linear models. You must use the following:
+mod01 - Intercept-only model – no INPUTS!
+mod02 - Categorical variables only – linear additive
+mod03 - Continuous variables only – linear additive
+mod04 - All categorical and continuous variables – linear additive
+mod05 - Interaction of the categorical inputs with all continuous inputs main effects
+mod06 - Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+mod07 - Interaction of the categorical inputs with all main effect and all pairwise interactions of continuous inputs
+ 3 models with basis functions of your choice
+mod08 - Try non-linear basis functions based on your EDA.
+mod09 - Can consider interactions of basis functions with other basis functions!
+mod10 - Can consider interactions of basis functions with the categorical inputs!
+###
+
+```{r}
+mod01 <- glm( outcome ~ 1, data = dfiiiA, family = 'binomial' )
+mod02 <- glm( outcome ~ Lightness + Saturation, data = dfiiiA, family = 'binomial')
+mod03 <- glm(outcome ~ R + G + B + Hue, data = dfiiiA, family = 'binomial')
+mod04 <- glm(outcome ~ R + G + B + Lightness + Saturation + Hue, data = dfiiiA, family = 'binomial')
+mod05 <- glm(outcome ~ (Lightness + Saturation) * (R + G + B + Hue), data = dfiiiA, family = 'binomial')
+mod06 <- glm(outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, data = dfiiiA, family = 'binomial')
+mod07 <- glm(outcome ~ (Lightness + Saturation) * (R + G + B + Hue + 
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue), data = dfiiiA,family = 'binomial')
+mod08 <- glm(outcome ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2) + Lightness + Saturation, data = dfiiiA,family = 'binomial')
+mod09 <- glm(outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, data = dfiiiA,family = 'binomial')
+mod10 <- glm(outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2)) * (Lightness + Saturation), data = dfiiiA,family = 'binomial')
+```
+
+###
+These models are consistent with the regression portion.
+• Did you experience any issues or warnings while fitting the generalized linear models?
+###
+Sol: Yes. I faced a warning that
+Warning: glm.fit: fitted probabilities numerically 0 or 1
+
+###
+• Which of the 10 models is the best?
+• What performance metric did you use to make your selection?
+###
+mod09 is the best, since it has lowest BIC value.
+
+```{r}
+extract_metrics <- function(mod_object, mod_name)
+{
+broom::glance(mod_object) %>%
+  mutate(model_name = mod_name)
+}
+```
+
+```{r}
+glm_mle_results <- purrr::map2_dfr(list(mod01, mod02, mod03, mod04,
+mod05, mod06, mod07, mod08, mod09, mod10),
+as.character(1:10),
+extract_metrics)
+```
+
+```{r}
+glm_mle_results %>%
+select(model_name, BIC) %>%
+pivot_longer(c(BIC)) %>%
+ggplot(mapping = aes(x = model_name, y = value)) +
+geom_point(size = 5) +
+facet_wrap(~name, scales = 'free_y') +
+theme_bw()
+
+glm_mle_results %>% glimpse()
+```
+
+```{r}
+top_models <- glm_mle_results %>%
+  arrange(BIC) %>%  # Sort data frame by AIC in ascending order
+  slice_head(n = 3) %>%  # Select the top 3 models with the lowest AIC
+  select(model_name, AIC, BIC, nobs) 
+top_models
+```
+
+<!-- Visualize the coefficient summaries for your top 3 models. -->
+
+```{r}
+mod09 %>%
+coefplot::coefplot(intercept = FALSE) +
+theme_bw()
+
+mod09 %>% summary()
+```
+
+```{r}
+mod06 %>%
+coefplot::coefplot(intercept = FALSE) +
+theme_bw()
+
+mod06 %>% summary()
+```
+
+```{r}
+mod08 %>%
+coefplot::coefplot(intercept = FALSE) +
+theme_bw()
+
+mod08 %>% summary()
+```
+###
+• How do the coefficient summaries compare between the top 3?
+• Which inputs seem important?
+###
+Sol: mod09:Numerous interaction terms suggest consideration of nonlinear relationships and interactions.
+Large confidence intervals indicate uncertainty in effect sizes.
+The Hue, B, and their interactions stand out with the largest magnitudes, indicating their importance.
+
+mod06:Simpler model with fewer interaction terms and lower-order polynomial terms.
+Smaller confidence intervals suggest more precise estimates.
+Hue is prominent, along with color variables R, G, B, and their interactions.
+
+mod08:Pronounced polynomial terms for Hue with large positive and negative coefficients.
+Large confidence intervals for Hue coefficients suggest uncertainty.
+Other RGB color interaction terms are less significant.
+
+Hue appears crucial in all models, with varying levels of complexity and certainty.
+mod09 and mod08 exhibit more complexity with higher-order terms and interactions.
+The mod06 focuses on main effects and some interactions, emphasizing Hue and RGB variables' importance.
+
+###
+Fit 2 Bayesian generalized linear models – one must be the best model
+from iiiA) and the second must be another model you fit in iiiA).
+• State why you chose the second model.
+###
+'mod09' is identified earlier as the best model based on the BIC and 'mod04' is considered along with this.
+'mod04' includes all the main effects without any interactions or polynomial terms. Hence it is chosen for the second model as it provides contrast in terms of complexity and variable interaction.
+
+###
+You may use the Laplace Approximation approach we used in lecture and
+the homework assignments.
+###
+```{r}
+Xmat_mod09 <- model.matrix( formula(mod09), data = dfiiiA )
+
+Xmat_mod04 <- model.matrix( formula(mod04), data = dfiiiA )
+```
+
+```{r}
+purrr::map2_lgl(purrr::map(list(mod09, mod04),
+                           ~names(coef(.))),
+                purrr::map(list(Xmat_mod09, Xmat_mod04),
+                           colnames),
+                all.equal)
+```
+
+```{r}
+info_mod09 <- list(
+  yobs = dfiiiA$outcome,
+  design_matrix = Xmat_mod09,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+
+info_mod04<- list(
+  yobs = dfiiiA$outcome,
+  design_matrix = Xmat_mod04,
+  mu_beta = 0,
+  tau_beta = 4.5
+)
+```
+
+
+```{r}
+logistic_logpost <- function(unknowns, my_info)
+{
+  # extract the design matrix and assign to X
+  X <- my_info$design_matrix
+  
+  # calculate the linear predictor
+  eta <- as.vector( X %*% as.matrix(unknowns))
+  
+  # calculate the event probability
+  mu <- boot::inv.logit(eta)
+  
+  # evaluate the log-likelihood
+  log_lik <- sum(dbinom(x = my_info$yobs,
+                        size = 1, 
+                        prob = mu,
+                        log = TRUE))
+  
+  # evaluate the log-prior
+  log_prior <- sum(dnorm(x = unknowns,
+                         mean = my_info$mu_beta,
+                         sd = my_info$tau_beta,
+                         log = TRUE))
+  
+  # sum together
+  log_lik + log_prior
+}
+```
+
+```{r}
+my_laplace <- function(start_guess, logpost_func, ...)
+{
+  # code adapted from the `LearnBayes`` function `laplace()`
+  fit <- optim(start_guess,
+               logpost_func,
+               gr = NULL,
+               ...,
+               method = "BFGS",
+               hessian = TRUE,
+               control = list(fnscale = -1, maxit = 5001))
+  
+  mode <- fit$par
+  post_var_matrix <- -solve(fit$hessian)
+  p <- length(mode)
+  int <- p/2 * log(2 * pi) + 0.5 * log(det(post_var_matrix)) + logpost_func(mode, ...)
+  # package all of the results into a list
+  list(mode = mode,
+       var_matrix = post_var_matrix,
+       log_evidence = int,
+       converge = ifelse(fit$convergence == 0,
+                         "YES", 
+                         "NO"),
+       iter_counts = as.numeric(fit$counts[1]))
+}
+```
+
+```{r}
+laplace_mod09 <- my_laplace(rep(0, ncol(Xmat_mod09)), logistic_logpost, info_mod09)
+laplace_mod04 <- my_laplace(rep(0, ncol(Xmat_mod04)), logistic_logpost, info_mod04)
+laplace_mod09
+laplace_mod04
+```
+###
+Visualize the regression coefficient posterior summary statistics for your
+best model.
+###
+
+```{r}
+viz_post_coefs <- function(post_means, post_sds, xnames)
+{
+  tibble::tibble(
+    mu = post_means,
+    sd = post_sds,
+    x = xnames
+  ) %>% 
+    mutate(x = factor(x, levels = xnames)) %>% 
+    ggplot(mapping = aes(x = x)) +
+    geom_hline(yintercept = 0, color = 'grey', linetype = 'dashed') +
+    geom_point(mapping = aes(y = mu)) +
+    geom_linerange(mapping = aes(ymin = mu - 2 * sd,
+                                 ymax = mu + 2 * sd,
+                                 group = x)) +
+    labs(x = 'feature', y = 'coefficient value') +
+    coord_flip() +
+    theme_bw()
+}
+```
+
+```{r}
+viz_post_coefs(laplace_mod09$mode[1:ncol(Xmat_mod09)],
+               sqrt(diag(laplace_mod09$var_matrix)[1:ncol(Xmat_mod09)]),
+               colnames(Xmat_mod09))
+```
+###
+You must make predictions with your 2 selected generalized linear models in order to visualize the trends of
+the event probability with respect to the inputs.
+• You may use non-Bayesian or Bayesian models for the predictions.
+• You must decide which inputs you wish to visualize the trends with respect to.
+###
+
+###
+• You must visualize your predictive trends using the following style:
+• The primary input should be used as the x-aesthetic in a graphic.
+• The secondary input should be used as a facet variable – it is recommended to use 4 to 6 unique values if your secondary
+input is a continuous variable.
+• You must decide the reference values to use for the remaining inputs.
+###
+```{r}
+viz_grid <- expand.grid(
+  R = seq(min(dfiiiA$R), max(dfiiiA$R), length.out = 100),
+  Hue = seq(min(dfiiiA$Hue), max(dfiiiA$Hue), length.out = 9),
+  G = median(dfiiiA$G),
+  B = median(dfiiiA$B),
+  Lightness = unique(dfiiiA$Lightness)[1], 
+  Saturation = unique(dfiiiA$Saturation)[1],
+  stringsAsFactors = FALSE
+) %>% 
+  tibble::as_tibble()
+
+viz_grid %>% glimpse()
+```
+###
+You MUST include the predicted mean event probability and the confidence interval whether you use non-
+Bayesian or Bayesian models.
+###
+
+```{r}
+compute_predictions <- function(mod, xnew) {
+  preds <- predict(mod, newdata = xnew, type = "link", se.fit = TRUE)
+  pred_prob <- plogis(preds$fit) 
+  ci_lower <- plogis(preds$fit - 1.96 * preds$se.fit)
+  ci_upper <- plogis(preds$fit + 1.96 * preds$se.fit)
+  return(tibble(
+    R = xnew$R,
+    Hue = xnew$Hue,
+    Probability = pred_prob,
+    CI_Lower = ci_lower,
+    CI_Upper = ci_upper
+  ))
+}
+```
+
+
+```{r}
+viz_grid_mod09 <- compute_predictions(mod09, viz_grid)
+viz_grid_mod04 <- compute_predictions(mod04, viz_grid)
+viz_grid_mod09 %>% glimpse()
+viz_grid_mod04 %>% glimpse()
+```
+
+```{r}
+plot_predictions <- function(data, title) {
+  ggplot(data, aes(x = R, y = Probability)) +
+    geom_line() +
+    geom_ribbon(aes(ymin = CI_Lower, ymax = CI_Upper), alpha = 0.2, fill = "blue") +
+    facet_wrap(~ Hue, scales = "free") +
+    labs(title = title, x = "R", y = "Predicted Probability") +
+    theme_minimal()
+}
+
+plot_mod09 <- plot_predictions(viz_grid_mod09, "Predictive Trend from mod09")
+plot_mod04 <- plot_predictions(viz_grid_mod04, "Predictive Trend from mod04")
+plot_mod09
+plot_mod04
+```
+###
+• You MUST state if the predictive trends are consistent between the 2 selected generalized linear models.
+###
+Sol:Mod09 shows a non-linear relationship, with probabilities initially high, decreasing, then increasing again, forming a U-shape or inverse U-shape depending on Hue. In contrast, mod04 indicates consistently decreasing trends, starting high at low R and decreasing as R increases.
+
+The models differ in several aspects. Mod09 suggests a complex relationship with an inflection point, while mod04 indicates a simpler, monotonically decreasing trend. Additionally, mod09 predicts probabilities near 1 or 0 for some Hue levels, whereas mod04's probabilities are bounded within a narrower range.
+
+In terms of uncertainty, mod09 has wider confidence intervals, indicating higher uncertainty compared to mod04. Overall, the models' predictive trends differ significantly, with mod09 suggesting a more complex relationship with greater uncertainty, while mod04 implies a simpler, more consistent trend with narrower confidence intervals.
+
+###
+You may use either caret or tidymodels to handle the preprocessing, training,
+testing, and evaluation.
+###
+The data set associated with iiiD) changes the data type of the `outcome` variable. The `ifelse()` function is used to convert `outcome` to a character data type. The value of `outcome = 1` is converted to the string `'event'` and the value of `outcome = 0` is converted to `'non_event'`. The `outcome` data type is then converted to a factor (R's categorical variable data type) with `'event'` forced as the first level.  
+
+```{r, make_iiiD_data}
+dfiiiD <- df %>% 
+  select(-response) %>% 
+  mutate(outcome = ifelse(outcome == 1, 'event', 'non_event'),
+         outcome = factor(outcome, levels = c('event', 'non_event')))
+
+dfiiiD %>% glimpse()
+```
+
+By converting `outcome` to a factor, the unique values of the variables are "always known":  
+
+```{r, show_outcome_levels}
+dfiiiD %>% pull(outcome) %>% levels()
+```
+
+However, the value counts are the same as the original encoding.  
+
+```{r, confirm_outcome_Counts}
+dfiiiD %>% count(outcome)
+```
+###
+You must train and tune the following models:
+• Generalized linear models:
+• All categorical and continuous inputs - linear additive features
+• Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+• The 2 models selected from iiiA) (if they are not one of the two above)
+###
+The models that are considered here are mod04, mod06, mod09.
+
+```{r}
+my_ctrl <- trainControl(method = 'repeatedcv', number = 5, repeats = 3)
+
+my_metric <- "Accuracy"
+```
+
+```{r}
+set.seed(2021)
+mod04_acc <- train(outcome ~ R + G + B + Lightness + Saturation + Hue, 
+                   data = dfiiiD,
+                   method = 'glm',
+                   metric = my_metric,
+                   preProcess = c("center", "scale"),
+                   trControl = my_ctrl)
+mod04_acc
+```
+
+```{r}
+set.seed(2021)
+mod06_acc <- train(outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+                   method = 'glm',
+                   metric = my_metric,
+                   preProcess = c("center", "scale"),
+                   trControl = my_ctrl)
+mod06_acc
+```
+```{r}
+set.seed(2021)
+mod09_acc <- train(outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+                   method = 'glm',
+                   metric = my_metric,
+                   preProcess = c("center", "scale"),
+                   trControl = my_ctrl)
+mod09_acc
+```
+
+###
+• Regularized regression with Elastic net
+• Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+• The more complex of the 2 models selected from iiiA)
+###
+The models that are considered here are mod06 and mod09.
+```{r}
+set.seed(1234)
+
+enet_acc_mod06 <- train( outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+                       method = 'glmnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl)
+
+enet_acc_mod06
+```
+
+```{r}
+set.seed(1234)
+
+enet_acc_mod09 <- train( outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+                       method = 'glmnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl)
+
+enet_acc_mod09
+```
+###
+• Neural network
+###
+```{r}
+set.seed(1234)
+
+nnet_acc_mod06 <- train( outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+                       method = 'nnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+nnet_acc_mod06
+```
+
+```{r}
+set.seed(1234)
+
+nnet_acc_mod09 <- train( outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+                       method = 'nnet',
+                       metric = my_metric,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl,
+                       trace = FALSE)
+
+nnet_acc_mod09
+```
+###
+• Random forest
+###
+```{r}
+set.seed(1234)
+
+rf_acc_mod06 <- train( outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+                     method = 'rf',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+rf_acc_mod06
+```
+
+```{r}
+set.seed(1234)
+
+rf_acc_mod09 <- train( outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+                     method = 'rf',
+                     metric = my_metric,
+                     trControl = my_ctrl,
+                     importance = TRUE)
+
+rf_acc_mod09
+```
+###
+• Gradient boosted tree
+###
+```{r}
+set.seed(1234)
+gbm_acc_mod06 <- train(
+  outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+  method = 'xgbTree',
+  metric = my_metric,
+  trControl = my_ctrl,
+  preProcess = c("center", "scale")
+)
+gbm_acc_mod06
+```
+
+```{r}
+set.seed(1234)
+gbm_acc_mod09 <- train(
+  outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+  method = 'xgbTree',
+  metric = my_metric,
+  trControl = my_ctrl,
+  preProcess = c("center", "scale")
+)
+gbm_acc_mod09
+```
+
+###
+• 2 methods of your choice that we did not explicitly discuss in lecture
+###
+```{r}
+set.seed(1234)
+svm_acc_mod06 <- train(
+  outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+  method = 'svmRadial',
+  metric = my_metric,
+  trControl = my_ctrl,
+  preProcess = c("center", "scale"),
+  tuneLength = 10  
+)
+svm_acc_mod06
+```
+
+```{r}
+set.seed(1234)
+svm_acc_mod09 <- train(
+  outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+  method = 'svmRadial',
+  metric = my_metric,
+  trControl = my_ctrl,
+  preProcess = c("center", "scale"),
+  tuneLength = 10
+)
+svm_acc_mod09
+```
+
+```{r}
+set.seed(1234)
+knn_acc_mod06 <- train(
+  outcome ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+              data = dfiiiD,
+  method = 'knn',
+  metric = my_metric,
+  trControl = my_ctrl,
+  preProcess = c("center", "scale"),
+  tuneLength = 10
+)
+knn_acc_mod06
+```
+
+```{r}
+set.seed(1234)
+knn_acc_mod09 <- train(
+  outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+              data = dfiiiD,
+  method = 'knn',
+  metric = my_metric,
+  trControl = my_ctrl,
+  preProcess = c("center", "scale"),
+  tuneLength = 10
+)
+knn_acc_mod09
+```
+
+###
+• You must decide the resampling scheme.
+• That resampling scheme must be applied to ALL models!
+###
+Sol: 5 fold cross validation technique is used.
+
+###
+• Different models have different preprocessing requirements.
+• You must decide the appropriate preprocessing options you should consider.
+• You must identify the performance metrics you will focus on to compare
+the models.
+• You must identify the best model.
+###
+Sol: mod09 is the best one base on accuracy metric.
+
+###
+Which model is the best if you are interested in maximizing Accuracy
+compared to maximizing the Area Under the ROC Curve (ROC AUC)?
+###
+
+```{r}
+predicted_probabilities_mod09 <- predict(mod09_acc, newdata = dfiiiD, type = "prob")[, "event"]
+roc_curve_mod09 <- roc(response = dfiiiD$outcome, predictor = predicted_probabilities_mod09)
+roc_auc_mod09 <- auc(roc_curve_mod09)
+roc_auc_mod09  # This will print the AUC for mod09_acc
+
+# For mod06_acc
+predicted_probabilities_mod06 <- predict(mod06_acc, newdata = dfiiiD, type = "prob")[, "event"]
+roc_curve_mod06 <- roc(response = dfiiiD$outcome, predictor = predicted_probabilities_mod06)
+roc_auc_mod06 <- auc(roc_curve_mod06)
+roc_auc_mod06
+```
+
+mod09 is the best model with greater accuracy and ROC AUC values compared to others.
+Hence this is best model if the priority is maximizing Accuracy
+or maximizing the Area Under the ROC Curve.
+
+

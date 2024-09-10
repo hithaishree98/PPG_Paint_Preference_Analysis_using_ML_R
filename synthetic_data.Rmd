@@ -1,0 +1,134 @@
+ ---
+ title: "synthetic_data"
+ output: html_document
+ date: "2024-04-17"
+ ---
+
+```{r setup, include=FALSE}
+ knitr::opts_chunk$set(echo = TRUE)
+```
+
+ ## R Markdown
+
+ This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+ When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+ ###
+ In lecture, we have discussed the importance and usefulness of synthetic (fake) data in a complete Bayesian
+ model workflow.
+ • You may earn up to 15 BONUS points if you create your own synthetic data and demonstrate the ability to
+ recover the model parameters that generated the data.
+ • You may consider the regression problem OR the classification problem, but you must use Bayesian
+ modeling techniques.
+ • Regardless you must use the following to earn the maximum bonus:
+ • You must consider 1 categorical variable with 4 levels (unique values)
+ • You must consider 3 continuous variables
+ • You must specify the true functional (basis) relationship between the linear predictor and the inputs. You must specify the
+ true parameter values.
+ • You must generate small, medium, and large sample size data sets.
+ • You must fit your model, assuming the correct functional (basis) relationship for the small, medium, and large sample sizes.
+ ###
+
+```{r}
+library(rstanarm)
+library(tidyverse)
+```
+
+```{r}
+set.seed(2023)
+
+# Define true parameter values
+beta_0 <- 5
+beta_1 <- 2
+beta_2 <- -1
+beta_3 <- 3
+gamma_A <- 0  # Baseline category
+gamma_B <- 1.5
+gamma_C <- -2
+gamma_D <- 3
+
+# Generate synthetic data function
+generate_data <- function(n) {
+  X1 <- rnorm(n, 0, 1)
+  X2 <- rnorm(n, 0, 1)
+  X3 <- rnorm(n, 0, 1)
+  CatVar <- factor(sample(c("A", "B", "C", "D"), n, replace = TRUE), levels = c("A", "B", "C", "D"))
+  gamma <- model.matrix(~ CatVar - 1) %*% c(gamma_A, gamma_B, gamma_C, gamma_D)
+  noise <- rnorm(n, 0, 1)
+  y <- beta_0 + beta_1 * X1 + beta_2 * X2^2 + beta_3 * log(abs(X3) + 1) + gamma + noise
+  data.frame(y, X1, X2, X3, CatVar)
+}
+```
+
+```{r}
+# Generate datasets
+data_small <- generate_data(30)
+data_medium <- generate_data(300)
+data_large <- generate_data(3000)
+
+# Function to fit a Bayesian model and return the model object
+fit_model <- function(data) {
+  fit <- stan_glm(y ~ X1 + I(X2^2) + log(abs(X3) + 1) + CatVar,
+                  data = data,
+                  family = gaussian(),
+                  prior = normal(0, 2, autoscale = FALSE),
+                  prior_intercept = normal(0, 2, autoscale = FALSE),
+                  chains = 2, iter = 2000)
+  return(fit)
+}
+```
+
+```{r}
+# Fit models and store model objects
+fit_small <- fit_model(data_small)
+fit_medium <- fit_model(data_medium)
+fit_large <- fit_model(data_large)
+```
+
+```{r}
+# Function to extract estimates and standard errors from the model object
+extract_estimates_and_errors <- function(fit, dataset_size) {
+  estimates <- coef(fit)
+  std_errors <- se(fit)
+  tibble(
+    Parameter = names(estimates),
+    Estimate = estimates,
+    StdError = std_errors,
+    Dataset = dataset_size
+  )
+}
+
+# Extract estimates and standard errors for each dataset size
+estimates_small <- extract_estimates_and_errors(fit_small, "Small")
+estimates_medium <- extract_estimates_and_errors(fit_medium, "Medium")
+estimates_large <- extract_estimates_and_errors(fit_large, "Large")
+
+# Combine all estimates into one dataframe
+all_estimates <- bind_rows(estimates_small, estimates_medium, estimates_large)
+```
+
+```{r}
+# Define the true parameter values for plotting
+true_values <- tibble(
+  Parameter = rep(c("Intercept", "X1", "I(X2^2)", "log(abs(X3) + 1)", "CatVarB", "CatVarC", "CatVarD"), each = 3),
+  TrueValue = rep(c(beta_0, beta_1, beta_2, beta_3, gamma_B, gamma_C, gamma_D), each = 3),
+  Dataset = rep(c("Small", "Medium", "Large"), times = 7)
+)
+```
+
+```{r}
+# Plot the estimates with error bars and true values
+ggplot(all_estimates, aes(x = Parameter, y = Estimate, color = Dataset)) +
+  geom_point(position = position_dodge(width = 0.25)) +
+  geom_errorbar(aes(ymin = Estimate - 1.96 * StdError, ymax = Estimate + 1.96 * StdError),
+                position = position_dodge(width = 0.25), width = 0.1) +
+  geom_hline(data = true_values, aes(yintercept = TrueValue, color = Dataset), linetype = "dashed") +
+  labs(title = "Parameter Recovery with Error Bars across Different Sample Sizes",
+       x = "Parameter", y = "Estimate") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom")
+
+
+```
+

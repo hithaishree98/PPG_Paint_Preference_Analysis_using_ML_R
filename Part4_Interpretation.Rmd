@@ -1,0 +1,282 @@
+---
+title: "Part4_Interpretation"
+output: html_document
+date: "2024-04-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(viridis)
+```
+
+
+## Read training data
+
+The training data set is read in the code chunk below assuming you have downloaded the data from Canvas.  
+
+```{r, read_data_01}
+df <- readr::read_csv("paint_project_train_data.csv", col_names = TRUE)
+```
+
+```{r, reg_01}
+dfii <- df |> 
+  mutate(y = boot::logit( (response - 0) / (100 - 0) ) ) |> 
+  select(R, G, B, 
+         Lightness, Saturation, Hue,
+         y)
+```
+
+```{r, class_01}
+dfiiiD <- df |> 
+  select(-response) |> 
+  mutate(outcome = ifelse(outcome == 1, 'event', 'non_event'),
+         outcome = factor(outcome, levels = c('event', 'non_event')))
+```
+
+
+###
+• With the model training completed, you can now answer meaningful questions
+associated with the data!
+• You must identify the best regression model and the best classification model.
+###
+Sol: mod09 is the best performing model in both classification and regression based on AIC, BIC, rmse and accuracy metric values
+
+###
+• Identify the most important variables associated with your best performing models.
+###
+Sol: Polynomial terms for color intensity (R, G, B) and hue
+
+• Are the most important variables similar for the regression and classification tasks?
+Sol: Yes they are similar. The coefficients with the largest magnitudes appear to involve the polynomial terms of (R, G, B) and hue.
+
+###
+• Does one of the color model INPUTS “dominate” the other variables?
+###
+Sol:In the regression model, polynomial terms of RGB and their interactions, especially with Hue, have large coefficients and wide confidence intervals, indicating their significant effect. However, poly(Hue, 2) appears most influential, with the largest negative coefficient, suggesting Hue's stronger impact than RGB.
+
+In contrast, the classification model shows a more pronounced difference. The poly(Hue, 2) coefficient has an exceedingly large negative value, overshadowing RGB coefficients by orders of magnitude, even though their confidence intervals overlap zero. This indicates that Hue dominates the effects of RGB inputs in this model.
+
+###
+• Does one of the color model INPUTS appear to be not helpful at all?
+###
+Sol:  RGB color model inputs have relatively smaller magnitudes compared to the Hue coefficients, but none of the RGB color model inputs appear to be unhelpful outright. Each seems to contribute some information to the model.
+
+###
+• Based on your modeling results, do you feel the color model INPUTS alone help identify POPULAR paints????
+###
+Sol:The Hue variable, in particular, stands out with large coefficients in both regression and classification plots, indicating that it may be a dominant predictor in determining paint popularity. While the RGB inputs have smaller coefficients, they also contribute to the models but to a lesser extent than Hue.
+Hence we can imply that color is an important factor but other attributes could also play a significant role in the popularity of paints.
+
+###
+You must drill down further to gain additional insights into the patterns of the
+data!
+• You must identify the combinations of Lightness and Saturation:
+• That appear to be the HARDEST to predict in the regression and classification tasks
+• That appear to be the EASIEST to predict in the regression and classification tasks
+• Base your conclusions on the best performing regression and classification
+models.
+• You should base your conclusions on the resampled HOLD-OUT sets and NOT on
+the TRAINING set!
+• Thus, save your resampled hold-out set predictions!
+###
+Sol:
+For the regression task (based on mod_regress):
+Easiest to Predict:
+
+The variables with the most significant t-values (and the smallest p-values) are the easiest to predict.
+
+The Lightnesspale category stands out as one of the easiest to predict, with a significant positive coefficient and a low p-value of 0.002668, indicating strong predictive power.
+
+The Saturationpure category also seems relatively easy to predict, with a lower p-value of 0.028152.
+
+Hardest to Predict:
+
+The hardest to predict variables would be those with non-significant p-values (larger than 0.05), suggesting that the model does not find a reliable effect of these variables.
+
+Saturationneutral has a very high p-value and is likely one of the harder variables to predict. 
+
+The Lightnesssaturated category also seems relatively harder to predict, with a higher p-value of 0.524584
+
+For the binary classification task (based on mod_binary_acc):
+
+Easiest to Predict:
+
+Saturationgray and Lightnessdeep have low p-values, suggesting they are strong predictors as well.
+
+Lightnessdeep has a higher value of 0.383569, but it is least compared to other lightness values. Hence it is considered.
+
+Hardest to Predict:
+
+The hardest to predict variables would be those with high p-values, indicating a lack of significance. 
+
+Lightnesssoft and Saturationmuted do not exhibit significant predictive power in the classification task, as indicated by their high p-values (greater than 0.05). These variables are considered harder to predict reliably.
+
+Since the selected best models do not include specific interaction terms for Lightness and Saturation, I am inferring the individual effects of Lightness and Saturation in this analysis.
+
+###
+You must visualize the trends associated with the HARDEST and EASIEST to predict Lightness and
+Saturation combinations with respect to the TWO most important continuous inputs.
+• Predictions should be made using the best performing models.
+• You must visualize your predictive trends as a SURFACE plot using the following style:
+• The primary continuous input should be used as the x-aesthetic in a graphic.
+• The secondary continuous input should be used the y-aesthetic in the graphic.
+• You must use 101 unique values for both the x and y aesthetics.
+• You must use geom_raster() to create the surface plot.
+• The fill aesthetic of geom_raster() must be set to the LOGIT-transformed response for the regression predictions and
+the EVENT probability for the classification predictions.
+• You must make the surface plot for the hardest to predict Lightness and Saturation combinations
+and again for the easiest to predict Lightness and Saturation combinations .
+• You must decide the reference values to use for the other inputs.
+• Thus you must make 2 surface plots for the best performing regression model and 2 surface plots for the best performing classification model.
+###
+
+```{r}
+mod_regress <- readr::read_rds("my_mod_regress.rds")
+mod_regress %>% summary()
+mod_binary_acc <- readr::read_rds("my_mod_binary_acc.rds")
+mod_binary_acc %>% summary()
+```
+```{r}
+mod_regress %>% formula()
+```
+```{r}
+mod_binary_acc %>% formula()
+```
+
+```{r}
+set.seed(2023)
+train_control <- trainControl(method = "cv", number = 10)
+model <- train(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + 
+    Lightness + Saturation, data = dfii, method = "lm", trControl = train_control)
+```
+
+```{r}
+create_surface_plot <- function(data, lightness, saturation, title_prefix) {
+  # Create the grid data
+  grid_data <- expand.grid(
+    R = seq(min(data$R), max(data$R), length.out = 101),
+    Hue = seq(min(data$Hue), max(data$Hue), length.out = 101),
+    G = median(data$G),  
+    B = median(data$B),
+    Lightness = lightness,
+    Saturation = saturation
+  )
+
+#   You must make the surface plot for the hardest to predict Lightness and Saturation combinations
+# and again for the easiest to predict Lightness and Saturation combinations .
+# • You must decide the reference values to use for the other inputs.
+  predictions <- predict(model, newdata = grid_data)
+  grid_data$Prediction = predictions
+
+
+  plot_title <- sprintf("%s\nLightness: %s - Saturation: %s", title_prefix, lightness, saturation)
+  
+  
+  p <- ggplot(grid_data, aes(x = R, y = Hue)) +
+    geom_raster(aes(fill = Prediction),interpolate = TRUE) +
+    scale_fill_viridis_c(option = "viridis", end = 0.9) +
+    labs(title = plot_title, x = "R", y = "Hue") +
+    annotate("text", x = Inf, y = Inf, label = sprintf("Lightness: %s\nSaturation: %s", lightness, saturation),
+             hjust = 1.1, vjust = 1.1, size = 4, color = "black", fontface = "bold") +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 14))
+
+  return(p)
+}
+```
+
+```{r}
+plot_easiest <- create_surface_plot(dfii, "pale", "pure", "Surface Plot: Easiest to Predict")
+plot_hardest <- create_surface_plot(dfii, "saturated", "neutral", "Surface Plot: Hardest to Predict")
+
+plot_easiest
+plot_hardest
+```
+
+```{r}
+set.seed(2023)
+train_control <- trainControl(method = "cv", number = 10, classProbs = TRUE) 
+classification_model <- train(outcome ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 +
+                                 Lightness + Saturation, 
+                              data = dfiiiD, 
+                              method = "glm", 
+                              family = "binomial", 
+                              trControl = train_control)
+```
+
+```{r}
+create_classification_surface_plot <- function(data, lightness, saturation, title_prefix) {
+  # Create the grid data
+  grid_data <- expand.grid(
+    R = seq(min(data$R), max(data$R), length.out = 101),
+    Hue = seq(min(data$Hue), max(data$Hue), length.out = 101),
+    G = median(data$G),  
+    B = median(data$B),
+    Lightness = lightness,
+    Saturation = saturation
+  )
+
+  # Make predictions 
+  predictions <- predict(classification_model, newdata = grid_data, type = "prob")
+  
+  grid_data$Event_Probability = predictions[, "event"]
+
+  plot_title <- sprintf("%s - Lightness: %s, Saturation: %s", title_prefix, lightness, saturation)
+  ggplot(grid_data, aes(x = R, y = Hue)) +
+    geom_raster(aes(fill = Event_Probability),interpolate = TRUE) +
+    scale_fill_viridis_c(option = "viridis", end = 0.9) +
+    labs(title = plot_title, x = "R", y = "Hue") +
+    theme_minimal()
+}
+
+```
+
+```{r}
+plot_classification_easiest <- create_classification_surface_plot(dfii, "deep", "gray", "Classification Surface Plot: Easiest to Predict")
+plot_classification_hardest <- create_classification_surface_plot(dfii, "soft", "muted", "Classification Surface Plot: Hardest to Predict")
+
+plot_classification_easiest
+plot_classification_hardest
+```
+
+
+
+###
+What conclusions can draw from your surface plots?
+###
+Sol:
+Variation in Predictions with Lightness and Saturation: The surface plots for the regression model (mod09) show how the predictions vary with changes in R and Hue at fixed levels of lightness and saturation. In the "easiest to predict" scenario, the prediction surface is quite uniform, indicating that the model is confident about its predictions across the range of R and Hue. For the "hardest to predict" scenario, the variation in prediction values across R and Hue is greater, indicating less confidence or more uncertainty in these regions.
+
+Impact of Interactions: The inclusion of interaction terms in the models suggests that the relationship between the predictors and the outcome is not simply additive. The non-linear transitions in the classification surface plots for mod09 indicate that the interaction between R, G, B, and Hue significantly affects the prediction, which is especially evident in the classification plots where probabilities of the event change non-linearly.
+
+Classification Probability Gradients: The classification surface plots for the generalized linear model (classification_model) with "easiest to predict" and "hardest to predict" combinations show areas of sharp gradients in event probability, especially in the "easiest to predict" scenario. These gradients are indicative of the model’s sensitivity to changes in the predictor space and can be interpreted as regions where small changes in R or Hue could lead to a significant change in the predicted probability of the event.
+
+Confidence in Different Regions: The color intensity and the spread of colors in the classification surface plots suggest that the model is more confident about predicting events in some regions of the predictor space than others. For instance, in the "easiest to predict" scenario, there is a clear delineation between high and low probabilities of an event, whereas in the "hardest to predict" scenario, the probabilities are more mixed, suggesting less certainty about the outcomes.
+
+Implications for Model Use: If you are using these models in a practical application, these surface plots can inform you about where the model predictions are most and least reliable. For example, if certain combinations of R, G, B, Hue, lightness, and saturation are common in your application domain, you would want to be cautious about using the model in regions where the surface plot indicates higher uncertainty.
+
+Choice of Reference Values: The reference values chosen for G and B at their median levels suggest an attempt to standardize the context for comparing R and Hue effects across lightness and saturation. This is a common approach when trying to isolate the impact of two variables while controlling for others in a high-dimensional space.
+
+###
+Are the trends associated with the HARDEST to predict combinations
+different from the trends associated with the EASIEST to prediction
+combinations?
+###
+Sol:Uniformity and Confidence: The "Easiest to Predict" combinations show more uniform predictions across the range of color properties, suggesting the model is more confident in these areas.
+
+Variability and Uncertainty: The "Hardest to Predict" combinations exhibit more variability and wider confidence intervals in their predictions, indicating less confidence and greater uncertainty about the outcomes.
+
+Gradient and Sensitivity: The plots for the "Easiest to Predict" scenarios display sharp gradients, implying that the model's predictions change rapidly with small changes in color properties, suggesting a higher sensitivity to these predictors.
+
+Predictive Signal: The clear demarcation between high and low probabilities in the "Easiest to Predict" scenarios indicates a strong predictive signal, as opposed to the more blended areas in the "Hardest to Predict" plots where the model has difficulty distinguishing between outcomes.

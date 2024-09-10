@@ -1,0 +1,85 @@
+---
+title: "Bonus_data"
+output: html_document
+date: "2024-04-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(corrplot)
+library(coefplot)
+library(caret)
+library(recipes)
+library(readr)
+library(dplyr)
+library(yardstick)
+```
+
+
+```{r, read_final_data}
+df_bonus <- read_csv("paint_project_bonus_data.csv")
+df_bonus$outcome <- factor(df_bonus$outcome)
+```
+###
+fit 2 classification models which account for:
+• Low frequency categorical input classes via LUMPING
+• Near zero variance features.
+###
+```{r}
+# Define the preprocessing recipe
+bonus_recipe <- recipe(outcome ~ ., data = df_bonus) %>%
+  step_other(all_nominal(), -all_outcomes(), threshold = 0.05) %>%  # Lumping low frequency levels
+  step_nzv(all_predictors()) %>%  # Remove near-zero variance predictors
+  step_dummy(all_nominal(), -all_outcomes())  # Convert remaining nominal variables to dummies
+
+# Split the data into training and testing sets
+set.seed(2023)
+split <- initial_split(df_bonus, prop = 0.75)
+train_data <- training(split)
+test_data <- testing(split)
+
+# Assess class balance
+table(df_bonus$outcome)
+
+# Improve model specifications with class weights for logistic regression if imbalanced
+logistic_spec <- logistic_reg(mode = "classification", penalty = 0.01, mixture = 0.5) %>%
+  set_engine("glm", weights = ifelse(df_bonus$outcome == "minority_class", 10, 1))
+
+# Improve random forest specification with tuned parameters
+rf_spec <- rand_forest(mode = "classification", mtry = 3, trees = 500, min_n = 10) %>%
+  set_engine("ranger", importance = 'impurity')
+
+# Apply resampling techniques if necessary
+cv_folds <- vfold_cv(train_data, v = 5, strata = outcome)
+
+# Evaluate with cross-validation
+workflow_logistic <- workflow() %>%
+  add_recipe(bonus_recipe) %>%
+  add_model(logistic_spec)
+
+workflow_rf <- workflow() %>%
+  add_recipe(bonus_recipe) %>%
+  add_model(rf_spec)
+
+# Collect cross-validation results
+results_logistic_cv <- fit_resamples(workflow_logistic, cv_folds, metrics = metric_set(roc_auc))
+results_rf_cv <- fit_resamples(workflow_rf, cv_folds, metrics = metric_set(roc_auc))
+
+# Print CV results
+collect_metrics(results_logistic_cv)
+collect_metrics(results_rf_cv)
+```
+

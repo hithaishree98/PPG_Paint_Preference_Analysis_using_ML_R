@@ -1,0 +1,734 @@
+---
+title: "Part_2_Regression"
+output: html_document
+date: "2024-04-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Load packages
+
+This example uses the `tidyverse` suite of packages.  
+
+```{r, load_tidyverse}
+library(tidyverse)
+library(corrplot)
+library(coefplot)
+library(splines)
+library(caret)
+```
+
+## Regression task
+
+```{r, read_final_data}
+df <- readr::read_csv("paint_project_train_data.csv", col_names = TRUE)
+df %>% glimpse()
+```
+
+As stated in the project guidelines, you will **not** model the continuous output, `response`, directly. The `response` is a bounded variable between 0 and 100. The `response` must be transformed to an unbounded variable to appropriately be modeled by a Gaussian likelihood. We are making this transformation because we want the **uncertainty** in the predicted output to also satisfy output constraints. If we did not make this transformation the uncertainty could violate the bounds, which would mean the model is providing unphysical results! By logit-transforming `response`, we will fully respect the bounds of the output variable.  
+
+The code chunk below assembles the data for Part ii) of the project. You should use this data set for all regression modeling tasks. The logit-transformed output is named `y`. The `dfii` dataframe as the original `response` and Binary output, `outcome`, removed. This way you can focus on the variables specific to the regression task.  
+
+
+```{r, make_reg_data}
+dfii <- df %>% 
+  mutate(y = boot::logit( (response - 0) / (100 - 0) ) ) %>% 
+  select(R, G, B, 
+         Lightness, Saturation, Hue,
+         y)
+
+dfii 
+```
+
+**Important**: It is up to you as to whether further preprocessing of the inputs are required before fitting the models.  
+
+### Simple model
+
+You are going to fit many models in this project. Rather than having a single large RMarkdown that fits all models, it can be useful to work in a modular fashion. You can have separate RMarkdowns for different portions of the project. You can fit/train models, save them, and then load them in other RMarkdowns as needed. This example RMarkdown shows how to fit a simple linear model just to show the process of saving and loading the model object back in.
+
+I will not preprocess the inputs before fitting this model. Please note that you should consider if preprocessing would be useful or not! The code chunk below fits a linear model to predict the logit-transformed output `y` via a linear relationship to the `R` input. The result is assigned to the `mod01` object.  
+
+###
+mod01 - ##Intercept-only model – no INPUTS!
+mod02 - Categorical variables only – linear additive
+mod03 - Continuous variables only – linear additive
+mod04 - All categorical and continuous variables – linear additive
+mod05 - Interaction of the categorical inputs with all continuous inputs main effects
+mod06 - Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+mod07 - Interaction of the categorical inputs with all main effect and all pairwise interactions of continuous inputs
+3 models with basis functions of your choice
+mod08 - Try non-linear basis functions based on your EDA.
+mod09 - Can consider interactions of basis functions with other basis functions!
+mod10 - Can consider interactions of basis functions with the categorical inputs!
+###
+
+
+```{r}
+mod01 <- lm( y ~ 1, data = dfii )
+mod02 <- lm( y ~ Lightness + Saturation, data = dfii)
+mod03 <- lm(y ~ R + G + B + Hue, data = dfii)
+mod04 <- lm(y ~ R + G + B + Lightness + Saturation + Hue, data = dfii)
+mod05 <- lm(y ~ (Lightness + Saturation) * (R + G + B + Hue), data = dfii)
+mod06 <- lm(y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, data = dfii)
+mod07 <- lm(y ~ (Lightness + Saturation) * (R + G + B + Hue + 
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue), data = dfii)
+mod08 <- lm(y ~ poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2) + Lightness + Saturation, data = dfii)
+mod09 <- lm(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, data = dfii)
+mod10 <- lm(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2)) * (Lightness + Saturation), data = dfii)
+```
+
+
+```{r, save_mod01}
+mod01 %>% readr::write_rds("my_mod01.rds")
+mod02 %>% readr::write_rds("my_mod02.rds")
+mod03 %>% readr::write_rds("my_mod03.rds")
+mod04 %>% readr::write_rds("my_mod04.rds")
+mod05 %>% readr::write_rds("my_mod05.rds")
+mod06 %>% readr::write_rds("my_mod06.rds")
+mod07 %>% readr::write_rds("my_mod07.rds")
+mod08 %>% readr::write_rds("my_mod08.rds")
+mod09 %>% readr::write_rds("my_mod09.rds")
+mod10 %>% readr::write_rds("my_mod10.rds")
+```
+
+```{r, reload_mod01}
+re_load_mod01 <- readr::read_rds("my_mod01.rds")
+re_load_mod02 <- readr::read_rds("my_mod02.rds")
+re_load_mod03 <- readr::read_rds("my_mod03.rds")
+re_load_mod04 <- readr::read_rds("my_mod04.rds")
+re_load_mod05 <- readr::read_rds("my_mod05.rds")
+re_load_mod06 <- readr::read_rds("my_mod06.rds")
+re_load_mod07 <- readr::read_rds("my_mod07.rds")
+re_load_mod08 <- readr::read_rds("my_mod08.rds")
+re_load_mod09 <- readr::read_rds("my_mod09.rds")
+re_load_mod10 <- readr::read_rds("my_mod10.rds")
+```
+
+```{r, check_reload_class}
+re_load_mod01 %>% class()
+re_load_mod02 %>% class()
+re_load_mod03 %>% class()
+re_load_mod04 %>% class()
+re_load_mod05 %>% class()
+re_load_mod06 %>% class()
+re_load_mod07 %>% class()
+re_load_mod08 %>% class()
+re_load_mod09 %>% class()
+re_load_mod10 %>% class()
+```
+
+###
+Which of the 10 models is the best?
+• What performance metric did you use to make your selection?
+###
+Sol:mod09 is considered the best, since it has lowest AIC value.
+
+```{r}
+extract_metrics <- function(mod, mod_name)
+{
+broom::glance(mod) %>% 
+    mutate(mod_name = mod_name)
+}
+
+all_metrics <- purrr::map2_dfr(list(mod01, mod02, mod03, mod04, mod05, mod06,mod07,mod08,mod09,mod10),
+as.character(1:10),
+extract_metrics)
+
+all_metrics %>% glimpse()
+
+all_metrics %>%
+select(mod_name, df, AIC) %>%
+pivot_longer(!c("mod_name", "df")) %>%
+ggplot(mapping = aes(x = mod_name, y = value)) +
+geom_point(size = 5) +
+facet_wrap(~name, scales = "free_y") +
+theme_bw()
+
+top_models <- all_metrics %>%
+  arrange(AIC) %>%
+  slice_head(n = 3) %>%
+  select(mod_name, r.squared, adj.r.squared, AIC, BIC, nobs)
+top_models
+```
+###
+Visualize the coefficient summaries for your top 3 models
+###
+```{r}
+ mod09 %>%
+ coefplot::coefplot(intercept = FALSE) +
+ theme_bw()
+ mod09 %>% coef() %>% length()
+ 
+ mod09 %>% summary()
+```
+
+```{r}
+ mod10 %>%
+ coefplot::coefplot(intercept = FALSE) +
+ theme_bw()
+ mod10 %>% coef() %>% length()
+ 
+ mod10 %>% summary()
+```
+
+```{r}
+ mod07 %>%
+ coefplot::coefplot(intercept = FALSE) +
+ theme_bw()
+ mod07 %>% coef() %>% length()
+ 
+ mod07 %>% summary()
+```
+###
+How do the coefficient summaries compare between the top 3 models?
+###
+Model mod09 displays several coefficients with substantial magnitudes, indicating that certain terms strongly influence the model. However, many coefficients are near zero, suggesting limited influence.
+Model mod10 demonstrates a high concentration of coefficients around zero, with fewer outliers. This pattern suggests a more balanced model with potentially less overfitting to the training data compared to mod09.
+Model mod07 features numerous coefficients with significant magnitudes and wide confidence intervals, indicating potential overfitting due to the model's complexity.
+
+###
+Which inputs seem important?
+###
+In model mod09, polynomial terms for color intensity (R, G, B) and hue, along with their interactions, have significant coefficients, indicating important non-linear relationships and interaction effects. Additionally, certain levels of the saturation and lightness categorical variables have noticeable coefficients, suggesting they significantly influence the outcome.
+
+Model mod10, similar to mod09, includes polynomial terms, but to a lesser extent. While these terms are still significant, their importance appears reduced compared to mod09. The coefficients for lightness and saturation levels are also smaller in mod10, indicating that their impact, although still relevant, is less pronounced in this model.
+
+In contrast, model mod07 includes an extensive number of interaction terms with large coefficients, indicating a complex model where interactions between inputs are crucial. The sheer number and spread of terms in mod07 make it challenging to pinpoint which specific inputs are most important, but it's evident that the model captures intricate relationships.
+
+###
+Fit 2 Bayesian linear models – one must be the best model from iiA) and
+the second must be another model you fit in iiA).
+• State why you chose the second model.
+• You may use the Laplace Approximation approach we used in lecture and
+the homework assignments.
+###
+'mod09' is identified earlier as the best model based on the Bayesian Information Criterion (BIC) and 'mod04' is considered along with this.
+'mod04' includes all the main effects without any interactions or polynomial terms. Hence it is chosen for the second model as it provides contrast in terms of complexity and variable interaction.
+
+###
+use the Laplace Approximation approach we used in lecture and
+the homework assignments.
+###
+```{r}
+Xmat_mod09 <- model.matrix( formula(mod09), data = dfii )
+Xmat_mod04 <- model.matrix( formula(mod04), data = dfii )
+```
+
+```{r}
+info_mod09 <- list(
+yobs = dfii$y,
+design_matrix = Xmat_mod09,
+mu_beta = 0,
+tau_beta = 1,
+sigma_rate = 1
+)
+
+info_mod04 <- list(
+yobs = dfii$y,
+design_matrix = Xmat_mod04,
+mu_beta = 0,
+tau_beta = 1,
+sigma_rate = 1
+)
+```
+
+```{r}
+lm_logpost <- function(unknowns, my_info)
+{
+  # specify the number of unknown beta parameters
+  length_beta <- ncol(my_info$design_matrix)
+  
+  # extract the beta parameters from the `unknowns` vector
+  beta_v <- unknowns[1:length_beta]
+  
+  # extract the unbounded noise parameter, varphi
+  lik_varphi <- unknowns[length_beta + 1]
+  
+  # back-transform from varphi to sigma
+  lik_sigma <- exp(lik_varphi)
+  
+  # extract design matrix
+  X <- my_info$design_matrix
+  
+  # calculate the linear predictor
+  mu <- as.vector( X %*% as.matrix(beta_v) )
+  
+  # evaluate the log-likelihood
+  log_lik <- sum(dnorm(x = my_info$yobs,
+                       mean = mu,
+                       sd = lik_sigma,
+                       log = TRUE))
+  
+  # evaluate the log-prior
+  log_prior_beta <- sum(dnorm(x = beta_v,
+                              mean = my_info$mu_beta,
+                              sd = my_info$tau_beta,
+                              log = TRUE))
+  
+  log_prior_sigma <- dexp(x = lik_sigma,
+                          rate = my_info$sigma_rate,
+                          log = TRUE)
+  
+  # add the mean trend prior and noise prior together
+  log_prior <- log_prior_beta + log_prior_sigma
+  
+  # account for the transformation
+  log_derive_adjust <- lik_varphi
+  
+  # sum together
+  log_lik + log_prior + log_derive_adjust
+}
+```
+
+```{r}
+my_laplace <- function(start_guess, logpost_func, ...)
+{
+  # code adapted from the `LearnBayes`` function `laplace()`
+  fit <- optim(start_guess,
+               logpost_func,
+               gr = NULL,
+               ...,
+               method = "BFGS",
+               hessian = TRUE,
+               control = list(fnscale = -1, maxit = 1001))
+  
+  mode <- fit$par
+  post_var_matrix <- -solve(fit$hessian)
+  p <- length(mode)
+  int <- p/2 * log(2 * pi) + 0.5 * log(det(post_var_matrix)) + logpost_func(mode, ...)
+  # package all of the results into a list
+  list(mode = mode,
+       var_matrix = post_var_matrix,
+       log_evidence = int,
+       converge = ifelse(fit$convergence == 0,
+                         "YES", 
+                         "NO"),
+       iter_counts = as.numeric(fit$counts[1]))
+}
+```
+
+
+```{r}
+laplace_mod09 <- my_laplace(rep(0, ncol(Xmat_mod09)+1), lm_logpost, info_mod09)
+laplace_mod09
+laplace_mod04 <- my_laplace(rep(0, ncol(Xmat_mod04)+1), lm_logpost, info_mod04)
+laplace_mod04
+```
+
+###
+After fitting the 2 models, you must identify the best model.
+• Which performance metric did you use to make your selection?
+###
+
+```{r}
+models_list <- list(mod09, mod04)
+model_names <- c("Model 09", "Model 04")
+
+all_metrics <- map2_dfr(models_list, model_names, extract_metrics, .id = "model_id")
+all_metrics %>% glimpse()
+```
+Sol: mod09 is the best since it has lowest AIC and BIC
+
+###
+Visualize the regression coefficient posterior summary statistics for
+your best model.
+###
+```{r}
+viz_post_coefs <- function(post_means, post_sds, xnames)
+{
+  tibble::tibble(
+    mu = post_means,
+    sd = post_sds,
+    x = xnames
+  ) %>% 
+    mutate(x = factor(x, levels = xnames)) %>% 
+    ggplot(mapping = aes(x = x)) +
+    geom_hline(yintercept = 0, color = 'grey', linetype = 'dashed') +
+    geom_point(mapping = aes(y = mu)) +
+    geom_linerange(mapping = aes(ymin = mu - 2 * sd,
+                                 ymax = mu + 2 * sd,
+                                 group = x)) +
+    labs(x = 'feature', y = 'coefficient value') +
+    coord_flip() +
+    theme_bw()
+}
+```
+
+
+```{r}
+viz_post_coefs(laplace_mod09$mode[1:ncol(Xmat_mod09)],
+               sqrt(diag(laplace_mod09$var_matrix)[1:ncol(Xmat_mod09)]),
+               colnames(Xmat_mod09))
+```
+
+###
+For your best model: Study the posterior UNCERTAINTY on the
+likelihood noise (residual error), 𝜎.
+• How does the lm() maximum likelihood estimate (MLE) on 𝜎 relate to the
+posterior UNCERTAINTY on 𝜎?
+• Do you feel the posterior is precise or are we quite uncertain about 𝜎?
+###
+```{r}
+sigma_var <- laplace_mod09$var_matrix[ncol(laplace_mod09$var_matrix), ncol(laplace_mod09$var_matrix)]
+sigma_sd <- sqrt(sigma_var)
+
+sigma_mode <- exp(laplace_mod09$mode[length(laplace_mod09$mode)])
+
+
+z_score <- qnorm(1 - 0.05 / 2)
+sigma_lower <- sigma_mode - z_score * sigma_sd
+sigma_upper <- sigma_mode + z_score * sigma_sd
+
+
+sigma_summary <- data.frame(Mode = sigma_mode, 
+                            StdError = sigma_sd, 
+                            LowerCI = sigma_lower, 
+                            UpperCI = sigma_upper)
+
+sigma_summary
+```
+
+Sol:The Bayesian model estimates the likelihood noise (σ) with high precision. The mode of σ is 0.065 with a small standard error, indicating clear data signal. The 95% credible interval is narrow (0.009 to 0.121), showing low uncertainty in the estimate. Unlike lm(), Bayesian inference provides a range of plausible values, enhancing understanding of uncertainty. The model's precise estimate and narrow interval suggest it effectively captures the residual error, with a moderate level of uncertainty, typical in statistical modeling.
+
+###
+You must make predictions with your 2 selected linear models in order to visualize the trends of the LOGIT-transformed response with respect to the inputs.
+• You may use non-Bayesian or Bayesian models for the predictions.
+• You must visualize your predictive trends using the following style:
+• The primary input should be used as the x-aesthetic in a graphic.
+• The secondary input should be used as a facet variable – it is recommended to use 4 to 6 unique values if your
+secondary input is a continuous variable.
+• You must decide the reference values to use for the remaining inputs.
+###
+```{r}
+viz_grid <- expand.grid(
+  R = seq(min(dfii$R), max(dfii$R), length.out = 101),
+  Hue = seq(min(dfii$Hue), max(dfii$Hue), length.out = 9),
+  Lightness = unique(dfii$Lightness)[1:4],  # Select distinct values (edit based on your actual data)
+  Saturation = unique(dfii$Saturation)[1:4],  # Select distinct values
+  G = mean(dfii$G),  # Mean of G as a reference
+  B = mean(dfii$B)  # Mean of B as a reference
+) %>%
+  as.data.frame() %>%
+  tibble::as_tibble()
+
+viz_grid %>% glimpse()
+```
+
+```{r}
+tidy_predict <- function(mod, xnew) {
+  pred_df <- predict(mod, newdata = xnew, interval = "confidence") %>%
+    as.data.frame() %>%
+    tibble::as_tibble() %>%
+    select(pred = fit, ci_lwr = lwr, ci_upr = upr) %>%
+    bind_cols(predict(mod, newdata = xnew, interval = "prediction") %>%
+              as.data.frame() %>%
+              tibble::as_tibble() %>%
+              select(pred_lwr = lwr, pred_upr = upr))
+  
+  xnew %>% bind_cols(pred_df)
+}
+```
+
+```{r}
+pred_lm_09 <- tidy_predict(mod09, viz_grid)
+pred_lm_04 <- tidy_predict(mod04, viz_grid)
+pred_lm_09 %>% glimpse()
+pred_lm_04 %>% glimpse()
+```
+
+```{r}
+pred_lm_09 %>% 
+  ggplot(mapping = aes(x = R, y = pred)) +
+  geom_ribbon(mapping = aes(ymin = pred_lwr, ymax = pred_upr),
+              fill = 'grey',alpha = 0.5) +
+  geom_ribbon(mapping = aes(ymin = ci_lwr, ymax = ci_upr),
+              fill = 'orange',alpha = 0.5) +
+  geom_line(color = 'black') +
+  facet_wrap(~Hue, scales = "free") +
+  labs(title = "Predictions from mod09", x = "R", y = "Predicted LOGIT(Response)") +
+  theme_bw()
+```
+
+```{r}
+pred_lm_04 %>% 
+  ggplot(mapping = aes(x = R, y = pred)) +
+  geom_ribbon(mapping = aes(ymin = pred_lwr, ymax = pred_upr),
+              fill = 'grey') +
+  geom_ribbon(mapping = aes(ymin = ci_lwr, ymax = ci_upr),
+              fill = 'orange') +
+  geom_line(color = 'black') +
+  facet_wrap(~Hue, scales = "free",labeller = label_both) +
+  labs(title = "Predictions from mod04", x = "R", y = "Predicted LOGIT(Response)") +
+  theme_bw()
+```
+
+###
+You MUST state if the predictive trends are consistent between the 2 selected linear models.
+###
+Sol:The comparison between mod09 and mod04 shows that both models predict a positive linear relationship between R and the logit(response), with increasing R leading to higher predicted logit values. However, mod09 has wider confidence intervals, indicating more uncertainty in its predictions compared to mod04, which suggests that mod04 provides more precise predictions.
+
+
+###
+You must train and tune the following models:
+• Linear models:
+• All categorical and continuous inputs - linear additive features
+• Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+• The 2 models selected from iiA) (if they are not one of the two above)
+###
+Sol:The models that are considered here are mod04, mod06 and mod09.
+
+```{r}
+formula(mod04)
+formula(mod06)
+formula(mod09)
+```
+```{r}
+my_ctrl_A <- trainControl(method = 'repeatedcv', number = 5, repeats = 5)
+my_metric_A <- "RMSE"
+```
+
+
+
+```{r}
+set.seed(2001)
+train_mod04 <- train(y ~ R + G + B + Lightness + Saturation + Hue, 
+                        data = dfii,
+                        method = "lm",
+                        metric = my_metric_A,
+                        trControl = my_ctrl_A)
+
+train_mod04
+```
+
+
+```{r}
+set.seed(2001)
+train_mod06 <- train(y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+                        data = dfii,
+                        method = "lm",
+                        metric = my_metric_A,
+                        trControl = my_ctrl_A)
+
+train_mod06
+```
+
+```{r}
+set.seed(2001)
+train_mod09 <- train(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+                        data = dfii,
+                        method = "lm",
+                        metric = my_metric_A,
+                        trControl = my_ctrl_A)
+
+train_mod09
+```
+
+###
+• Regularized regression with Elastic net
+• Add categorical inputs to all main effect and all pairwise interactions of continuous inputs
+• The more complex of the 2 models selected from iiA)
+###
+The models that are considered here are mod06 and mod09.
+```{r}
+set.seed(1234)
+
+enet_mod06 <- train(y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue, 
+                data = dfii, 
+                method = 'glmnet', 
+                metric = my_metric_A, 
+                preProcess = c("center", "scale"),
+                trControl = my_ctrl_A)
+
+enet_mod06
+```
+
+```{r}
+set.seed(1234)
+
+enet_mod09 <- train(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation, 
+                data = dfii, 
+                method = 'glmnet', 
+                metric = my_metric_A, 
+                preProcess = c("center", "scale"),
+                trControl = my_ctrl_A)
+
+enet_mod09
+```
+
+<!-- • Neural network -->
+
+```{r}
+set.seed(1234)
+
+nnet_mod06 <- train( y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue,
+                       data = dfii,
+                       method = 'nnet',
+                       metric = my_metric_A,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl_A,
+                       trace = FALSE, 
+                       linout = TRUE) 
+nnet_mod06
+```
+
+```{r}
+set.seed(1234)
+
+nnet_mod09 <- train( y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation,
+                       data = dfii,
+                       method = 'nnet',
+                       metric = my_metric_A,
+                       preProcess = c("center", "scale"),
+                       trControl = my_ctrl_A,
+                       trace = FALSE, 
+                       linout = TRUE) 
+nnet_mod09
+```
+
+<!-- • Random forest -->
+
+```{r}
+set.seed(1234)
+
+rf_mod06 <- train( y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue,
+                     data = dfii,
+                     method = 'rf',
+                     metric = my_metric_A,
+                     preProcess = c("center", "scale"),
+                     trControl = my_ctrl_A,
+                     importance = TRUE)
+
+rf_mod06
+```
+
+```{r}
+set.seed(1234)
+
+rf_mod09 <- train( y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation,
+                     data = dfii,
+                     method = 'rf',
+                     metric = my_metric_A,
+                     preProcess = c("center", "scale"),
+                     trControl = my_ctrl_A,
+                     importance = TRUE)
+
+rf_mod09
+```
+
+<!-- • Gradient boosted tree -->
+
+```{r}
+set.seed(1234)
+
+xgb_mod06 <- train(y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue,
+                   data = dfii,
+                   method = 'xgbTree',
+                   metric = my_metric_A,
+                   trControl = my_ctrl_A,
+                   preProcess = c("center", "scale"))
+xgb_mod06
+```
+
+```{r}
+set.seed(1234)
+
+xgb_mod09 <- train( y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation,
+                   data = dfii,
+                   method = 'xgbTree',
+                   metric = my_metric_A,
+                   trControl = my_ctrl_A,
+                   preProcess = c("center", "scale"))
+xgb_mod09
+```
+
+###
+• 2 methods of your choice that we did not explicitly discuss in lecture
+You must use ALL categorical and continuous inputs with the non-linear methods
+###
+```{r}
+my_ctrl <- trainControl(
+  method = "cv",   
+  number = 5,      
+  savePredictions = "final",
+  summaryFunction = defaultSummary
+)
+
+my_metric <- "RMSE"
+```
+
+```{r}
+svm_mod06 <- train(y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue,
+  data = dfii,
+  method = "svmRadial",  # using radial basis function kernel
+  metric = my_metric,       # replace RMSE with your metric, e.g., my_metric_A
+  trControl = my_ctrl,
+  preProcess = c("center", "scale")
+)
+
+svm_mod06
+```
+
+```{r}
+svm_mod09 <- train(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation,
+  data = dfii,
+  method = "svmRadial",  # using radial basis function kernel
+  metric = my_metric,       # replace RMSE with your metric, e.g., my_metric_A
+  trControl = my_ctrl,
+  preProcess = c("center", "scale")
+)
+svm_mod09
+```
+
+```{r}
+knn_mod06 <- train(y ~ Lightness + Saturation + R + G + B + Hue +
+              R:G + R:B + G:B + R:Hue + G:Hue + B:Hue,
+  data = dfii,
+  method = "knn",
+  metric = my_metric,      
+  trControl = my_ctrl,
+  preProcess = c("center", "scale"),
+  tuneLength = 10       
+)
+knn_mod06
+```
+
+```{r}
+knn_mod09 <- train(y ~ (poly(R, 2) + poly(G, 2) + poly(B, 2) + poly(Hue, 2))^2 + Lightness + Saturation,
+  data = dfii,
+  method = "knn",
+  metric = my_metric,      
+  trControl = my_ctrl,
+  preProcess = c("center", "scale"),
+  tuneLength = 10       
+)
+knn_mod09
+```
+###
+• You must decide the resampling scheme.
+• That resampling scheme must be applied to ALL models!
+###
+Sol: 5 fold cross validation is used
+
+###
+• Different models have different preprocessing requirements.
+• You must decide the appropriate preprocessing options you should consider.
+• You must identify the performance metrics you will focus on to
+compare the models.
+• You must identify the best model.
+###
+Sol: RMSE is used as performance metric. According to rmse values, mod09 is the best model

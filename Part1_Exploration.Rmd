@@ -1,0 +1,283 @@
+---
+title: "Part1_Exploration"
+output: html_document
+date: "2024-04-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+## Load packages
+
+This example uses the `tidyverse` suite of packages.  
+
+```{r, load_tidyverse}
+library(tidyverse)
+library(corrplot)
+```
+
+## Read data
+
+Please download the final project data from Canvas. If this Rmarkdown file is located in the same directory as the downloaded CSV file, it will be able to load in the data for you. It is **highly** recommended that you use an RStudio RProject to easily manage the working directory and file paths of the code and objects associated with the final project.  
+
+The code chunk below reads in the final project data.  
+
+```{r, read_final_data}
+df <- readr::read_csv("paint_project_train_data.csv", col_names = TRUE)
+```
+
+```{r, show_data_glimpse}
+df %>% glimpse()
+```
+
+##Exploration
+###
+Visualize the distributions of variables in the data set.
+• Counts for categorical variables.
+###
+```{r}
+lightness_counts <- df %>%
+  count(Lightness)
+Saturation_counts <- df %>%
+  count(Saturation)
+outcome_counts <- df %>%
+  count(outcome)
+lightness_counts
+Saturation_counts 
+outcome_counts
+
+count_df<- df %>%
+  mutate(Lightness = factor(Lightness),
+         Saturation = factor(Saturation),
+         outcome = factor(outcome))
+
+lightness_plot <- count_df %>%
+  ggplot(mapping = aes(x = Lightness)) +
+  geom_bar(fill = "skyblue", color = "black")+
+  labs(title = "Lightness")
+
+saturation_plot <- count_df %>%
+  ggplot(mapping = aes(x = Saturation)) +
+  geom_bar(fill = "skyblue", color = "black")+
+  labs(title = "Saturation")
+
+outcome_plot<-count_df %>%
+  ggplot(mapping = aes(x = outcome)) +
+  geom_bar(fill = "skyblue", color = "black")+
+  labs(title = "outcome")
+lightness_plot
+saturation_plot
+outcome_plot
+```
+###
+• Histograms or Density plots for continuous variables. 
+###
+```{r}
+hist_r <- ggplot(df, aes(x = R)) +
+  geom_histogram(fill = "lightgreen", color = "black")+
+  labs(title = "Histogram of R")
+hist_r
+
+hist_g <- ggplot(df, aes(x = G)) +
+  geom_histogram(fill = "lightgreen", color = "black")+
+  labs(title = "Histogram of G")
+hist_g
+
+hist_b <- ggplot(df, aes(x = B)) +
+  geom_histogram(fill = "lightgreen", color = "black")+
+  labs(title = "Histogram of B")
+hist_b
+
+hist_response <- ggplot(df, aes(x = response)) +
+  geom_histogram(fill = "lightgreen", color = "black")+
+  labs(title = "Histogram of response")
+hist_response
+
+
+```
+###
+Are the distributions Gaussian like?
+###
+Sol:No, the distributions are not Gaussian type.
+
+
+###
+Condition (group) the continuous variables based on the categorical variables.
+###
+
+```{r}
+df %>%
+  group_by(Lightness) %>%
+  summarise(
+    mean_R = mean(R),
+    sd_R = sd(R),
+    mean_G = mean(G),
+    sd_G = sd(G),
+    mean_B = mean(B),
+    sd_B = sd(B),
+    mean_Hue = mean(Hue),
+    sd_Hue = sd(Hue),
+    mean_response = mean(response),
+    sd_response = sd(response)
+  )
+df %>%
+  group_by(Saturation) %>%
+  summarise(
+    mean_R = mean(R),
+    sd_R = sd(R),
+    mean_G = mean(G),
+    sd_G = sd(G),
+    mean_B = mean(B),
+    sd_B = sd(B),
+    mean_Hue = mean(Hue),
+    sd_Hue = sd(Hue),
+    mean_response = mean(response),
+    sd_response = sd(response)
+  )
+df %>%
+  group_by(outcome) %>%
+  summarise(
+    mean_R = mean(R),
+    sd_R = sd(R),
+    mean_G = mean(G),
+    sd_G = sd(G),
+    mean_B = mean(B),
+    sd_B = sd(B),
+    mean_Hue = mean(Hue),
+    sd_Hue = sd(Hue),
+    mean_response = mean(response),
+    sd_response = sd(response)
+  )
+
+
+ggplot(df, aes(x = Lightness, y = R)) + geom_boxplot()
+ggplot(df, aes(x = Saturation, y = R)) + geom_boxplot()
+ggplot(df, aes(x = outcome, y = R)) + geom_boxplot()
+```
+###
+• Are there differences in continuous variable distributions and continuous variable summary
+statistics based on categorical variable values?
+• Are there differences in continuous variable distributions and continuous variable summary
+statistics based on the binary outcome?
+###
+Sol:Observations based on categorical variable values:
+
+1. Lightness: The distribution of the R variable varies significantly across different lightness categories. Lighter categories like "light" and "pale" tend to have higher mean values for R and lower variability (standard deviation) compared to darker categories like "dark" and "deep." This suggests that lighter colors generally have higher intensity of the red color (represented by R).
+
+2. Saturation: Similar to lightness, the mean R values fluctuate across saturation categories. Categories like "bright" and "pure" have higher average R values compared to categories like "subdued" and "gray." There is also variability in spread and the presence of outliers, indicating differences in distributions.
+
+Observations based on binary outcome:
+
+1. Outcome: Grouping by the binary outcome variable shows differences in the distributions of R (and likely G and B, although not visualized). The mean R value for the group with outcome 1 is lower than for the group with outcome 0. This suggests a potential association between color intensity values and the binary outcome.
+
+###
+Visualize the relationships between the continuous inputs, are they correlated?
+###
+```{r}
+cor_matrix <- cor(df[, c("R", "G", "B", "Hue")])
+corrplot(cor_matrix, method = "circle", type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, 
+         cl.lim = c(-1, 1))
+```
+
+
+Sol:Hue and RGB: There is a strong negative correlation between Hue and the RGB variables. This suggests that as the Hue increases, the RGB values tend to decrease, and vice versa.
+
+R and G: There is a strong positive correlation between the Red (R) and Green (G) variables. This indicates that as the intensity of Red increases, the intensity of Green also tends to increase in the dataset.
+
+R and B: The correlation between Red (R) and Blue (B) is also positive, although it appears to be weaker than the correlation between Red and Green.
+
+G and B: The Green (G) and Blue (B) variables show a positive correlation, indicating that these two color channels tend to increase or decrease together.
+
+In summary, the correlation plot shows that R, G, and B variables are all positively correlated with each other, and all are negatively correlated with the Hue variable.
+
+###
+Visualize the relationships between the continuous outputs (response and the
+LOGIT-transformed response, y) with respect to the continuous INPUTS.
+###
+```{r}
+ggplot(df, aes(x = R, y = response, color = Lightness)) +
+  geom_point() +
+  facet_wrap(~Saturation)+
+  labs(title = "Response vs R by Lightness and Saturation", x = "R", y = "Response")
+```
+
+```{r}
+ggplot(df, aes(x = G, y = response, color = Lightness)) +
+  geom_point() +
+  facet_wrap(~Saturation)+
+  labs(title = "Response vs G by Lightness and Saturation", x = "G", y = "Response")
+```
+
+```{r}
+ggplot(df, aes(x = B, y = response, color = Lightness)) +
+  geom_point() +
+  facet_wrap(~Saturation)+
+  labs(title = "Response vs B by Lightness and Saturation", x = "B", y = "Response")
+```
+
+```{r}
+ggplot(df, aes(x = Hue, y = response, color = Lightness)) +
+  geom_point() +
+  facet_wrap(~Saturation)+
+  labs(title = "Response vs Hue by Lightness and Saturation", x = "Hue", y = "Response")
+```
+###
+• Can you identify any clear trends? Do the trends depend on the categorical INPUTS?
+###
+Sol:Summary of Trends:
+
+1. RGB Values: There is a clear positive trend between the response variable and the Red (R), Green (G), and Blue (B) values. As the color intensity values increase, so does the response variable, indicating a possible linear relationship.
+
+2. Hue: The relationship between the response variable and Hue is more complex and does not appear to be linear. Further analysis, possibly involving non-linear methods, may be needed to understand this relationship properly.
+
+3. Dependence on Categorical Inputs: The trends vary with the categorical inputs of Lightness and Saturation. While the positive trend with R, G, and B is generally consistent across levels of Saturation, the impact of Lightness is less clear. Different levels of Lightness may exhibit distinct patterns of response.
+
+###
+How can you visualize the behavior of the binary outcome with respect to the continuous inputs? How can you visualize the behavior of the binary outcome with respect to the categorical INPUTS?
+###
+Sol:Scatter plots are used here to visualize the behavior of the binary outcome with respect to the continuous inputs.
+Bar charts are used here to visualize the behavior of the binary outcome with respect to the continuous inputs.
+```{r}
+ggplot(df, aes(x = R, y = outcome, color = factor(outcome))) +
+  geom_point() +
+  labs(title = "Outcome vs R",
+       x = "R", y = "Outcome")
+```
+
+```{r}
+ggplot(df, aes(x = G, y = outcome, color = factor(outcome))) +
+  geom_point() +
+  labs(title = "Outcome vs G",
+       x = "G", y = "Outcome")
+```
+
+```{r}
+ggplot(df, aes(x = B, y = outcome, color = factor(outcome))) +
+  geom_point() +
+  labs(title = "Outcome vs B",
+       x = "B", y = "Outcome")
+```
+
+```{r}
+ggplot(df, aes(x = Hue, y = outcome, color = factor(outcome))) +
+  geom_point() +
+  labs(title = "Outcome vs Hue",
+       x = "Hue", y = "Outcome")
+```
+
+```{r}
+ggplot(df, aes(x = Lightness, fill = factor(outcome))) +
+  geom_bar() +
+  labs(title = "Outcome vs Lightness")
+```
+
+```{r}
+ggplot(df, aes(x = Saturation, fill = factor(outcome))) +
+  geom_bar() +
+  labs(title = "Outcome vs Saturation")
+```
+
