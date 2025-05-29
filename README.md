@@ -1,4 +1,4 @@
-# Machine-Learning-Analysis
+# PPG-Paint-Preference-Analysis-using-ML-R
 
 ## 📑 Project Sections & What We Learned
 
