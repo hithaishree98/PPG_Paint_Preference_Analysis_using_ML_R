@@ -1,6 +1,6 @@
 # PPG-Paint-Preference-Analysis-using-ML-R
 
-## 📑 Project Sections & What We Learned
+## Project Sections & What We Learned
 
 ### Part I – Exploration  
 **What I set out to learn:**  
