@@ -1,4 +1,4 @@
-# PPG-Paint-Preference-Analysis-using-ML-R
+# PPG_Paint_Preference_Analysis_using_ML_R
 
 ## Project Sections & What We Learned
 
